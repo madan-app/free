@@ -1,0 +1,27 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Collage Maker — DocuCraft</title><link rel="stylesheet" href="../style.css"></head><body><header class="topbar"><div class="brand"><span class="logo">D</span><span>DocuCraft</span></div><a href="../index.html">Home</a></header>
+<main class="tool-page"><a class="back" href="../index.html">← All tools</a><h1>Collage Maker</h1><p class="sub">Select images, choose the paper, see the layout live, and export JPEG, PNG or a multi-page PDF.</p>
+<div class="card">
+<div class="drop"><b>Select images</b><br><input id="files" type="file" accept="image/*" multiple></div>
+<div class="row" style="margin-top:18px">
+<label>Page <select id="paper"><option value="A4">A4</option><option value="A3">A3</option><option value="A5">A5</option><option value="Letter">Letter</option><option value="Legal">Legal</option></select></label>
+<label>Orientation <select id="orientation"><option>Portrait</option><option>Landscape</option></select></label>
+<label>Images/page <select id="count"><option>1</option><option>2</option><option>4</option><option>6</option><option>9</option><option>12</option></select></label>
+<label>Margin <input id="margin" type="number" value="24" min="0" max="100"></label>
+<label>Gap <input id="gap" type="number" value="12" min="0" max="80"></label>
+<label>Fit <select id="fit"><option value="contain">Contain</option><option value="cover">Cover</option></select></label>
+<label>Background <input id="bg" type="color" value="#ffffff"></label>
+</div>
+<div class="row" style="margin-top:18px"><button class="btn" id="jpg">Export all pages as JPEG</button><button class="btn" id="png">Export first page as PNG</button><button class="btn" id="pdf">Export multi-page PDF</button></div>
+<div id="thumbs" class="preview"></div><div style="margin-top:25px"><h3>Live preview</h3><div id="live" style="max-width:800px"></div></div><div id="status" class="status"></div>
+</div></main>
+<script>
+const filesEl=document.getElementById('files'), thumbs=document.getElementById('thumbs'), live=document.getElementById('live'), settings=['paper','orientation','count','margin','gap','fit','bg'];let imgs=[];
+filesEl.onchange=async()=>{imgs=[];for(const f of filesEl.files){let u=URL.createObjectURL(f),im=new Image();im.src=u;await im.decode();imgs.push({im,name:f.name});}thumbs.innerHTML=imgs.map((x,i)=>`<div><img src="${x.im.src}" style="aspect-ratio:1;object-fit:contain"><div class="note">${i+1}. ${x.name}</div></div>`).join('');render()};
+settings.forEach(id=>document.getElementById(id).oninput=render);
+function dims(){let d={A4:[794,1123],A3:[1123,1587],A5:[561,794],Letter:[816,1056],Legal:[816,1344]}[paper.value];return orientation.value==='Landscape'?[d[1],d[0]]:d}
+function layoutCanvas(pageImgs){let [W,H]=dims(), n=+count.value, cols=Math.ceil(Math.sqrt(n)), rows=Math.ceil(n/cols),m=+margin.value,g=+gap.value,c=document.createElement('canvas');c.width=W;c.height=H;let x=c.getContext('2d');x.fillStyle=bg.value;x.fillRect(0,0,W,H);let cw=(W-2*m-(cols-1)*g)/cols,ch=(H-2*m-(rows-1)*g)/rows;pageImgs.forEach((o,i)=>{let col=i%cols,row=Math.floor(i/cols),cx=m+col*(cw+g),cy=m+row*(ch+g),r=o.im.naturalWidth/o.im.naturalHeight,box=cw/ch,w=cw,h=ch;if(fit.value==='contain'){if(r>box)h=w/r;else w=h*r}else{if(r>box)w=h*r;else h=w/r}x.drawImage(o.im,cx+(cw-w)/2,cy+(ch-h)/2,w,h)});return c}
+function render(){if(!imgs.length){live.innerHTML='';return}let n=+count.value,c=layoutCanvas(imgs.slice(0,n));c.style.width='100%';c.style.border='1px solid #ddd';c.style.borderRadius='10px';live.innerHTML='';live.appendChild(c)}
+jpg.onclick=async()=>{if(!imgs.length)return alert('Choose images');let n=+count.value;for(let p=0;p<Math.ceil(imgs.length/n);p++){let c=layoutCanvas(imgs.slice(p*n,(p+1)*n));await new Promise(r=>c.toBlob(b=>{DOCU.download(b,`collage-page-${p+1}.jpg`);r()},'image/jpeg',.94))}status.textContent='JPEG pages exported.'}
+png.onclick=()=>{if(!imgs.length)return alert('Choose images');layoutCanvas(imgs.slice(0,+count.value)).toBlob(b=>DOCU.download(b,'collage-page-1.png'),'image/png');status.textContent='First page exported as PNG.'}
+pdf.onclick=async()=>{if(!imgs.length)return alert('Choose images');status.textContent='Creating PDF...';let {PDFDocument}=await DOCU.pdfLib(),pdf=await PDFDocument.create(),n=+count.value,d=dims(),mm=[d[0]*72/96,d[1]*72/96];for(let p=0;p<Math.ceil(imgs.length/n);p++){let c=layoutCanvas(imgs.slice(p*n,(p+1)*n)),b=await new Promise(r=>c.toBlob(r,'image/jpeg',.94)),ab=await b.arrayBuffer(),im=await pdf.embedJpg(ab),pg=pdf.addPage(mm);pg.drawImage(im,{x:0,y:0,width:mm[0],height:mm[1]})}DOCU.download(new Blob([await pdf.save()],{type:'application/pdf'}),'collage.pdf');status.textContent='Multi-page PDF exported.'}
+</script></body></html>
